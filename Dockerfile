@@ -24,7 +24,7 @@ RUN echo "server { \
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY server_public_key.sh /server_public_key.sh
-RUN chmod +x /server_public_key.sh
+RUN sed -i 's/\r$//' /server_public_key.sh && chmod +x /server_public_key.sh
 
 EXPOSE 80
 ENTRYPOINT ["/server_public_key.sh"]

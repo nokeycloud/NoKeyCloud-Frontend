@@ -1,8 +1,7 @@
-import {fetchCurrentUser, customFetch, type UserProfileResponse} from "@/shared/api";
+import {fetchCurrentUser, type UserProfileResponse} from "@/shared/api";
 import {decryptBytes, exportKey, importKey} from "@/shared/security";
 import {bytesToBase64, base64ToBytes} from "@/shared/lib";
 import {vaultKeys} from "@/entities/folder";
-import {backendBaseUrl} from "@/shared/config";
 
 type AuthStatus = "loading" | "authenticated" | "guest";
 
@@ -70,27 +69,11 @@ export async function refreshAuth() {
 
     setState({status: "loading", user: state.user, rootFolderId: state.rootFolderId, masterKey: currentMasterKey});
 
-    let me = await fetchCurrentUser();
+    const me = await fetchCurrentUser();
 
-    if (!me) {
-        try {
-            const refreshResponse = await customFetch(`${backendBaseUrl}/api/Authenticate/refresh`, {
-                method: "POST",
-                credentials: "include",
-                headers: { "Content-Type": "application/json" }
-            });
-
-            if (refreshResponse.ok) {
-                me = await fetchCurrentUser();
-            }
-        } catch (refreshErr) {
-            console.error("Silent token refresh network error:", refreshErr);
-        }
-    }
-    
     if (me && currentMasterKey) {
         try {
-            if(me.rootFolderId && me.rootFolderKey) {
+            if (me.rootFolderId && me.rootFolderKey) {
                 const encryptedRootFolderKeyBytes = base64ToBytes(me.rootFolderKey);
                 const decryptedRootFolderKey = await decryptBytes(currentMasterKey, encryptedRootFolderKeyBytes);
                 const rootFolderKey = await importKey(decryptedRootFolderKey);
