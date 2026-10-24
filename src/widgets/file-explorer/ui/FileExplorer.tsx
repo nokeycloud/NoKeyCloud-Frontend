@@ -3,6 +3,7 @@ import {
     ArrowLeft,
     ChevronRight,
     Code,
+    Trash2,
     File as FileIcon,
     FileText,
     Home,
@@ -18,6 +19,7 @@ import {
     WindowsVideoFile,
     Windows95WaveSound,
     WindowsSystemFile,
+    WindowsShellIcon142,
     WindowsZipFile,
     Windows95File,
     ProgmanIcon16,
@@ -380,6 +382,37 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
         }
     };
 
+    const handleTrash = async (fileId: string, fileName: string) => {
+        const loadingToast = toast.loading(`Moving ${fileName} to trash...`);
+
+        try {
+            const res = await customFetch(
+                `${backendBaseUrl}/api/File/trash/${fileId}`,
+                {
+                    method: "POST",
+                    credentials: "include"
+                }
+            );
+
+            if (!res.ok) throw new Error("Failed to move file to trash.");
+
+            toast.success("File moved to trash", {id: loadingToast});
+
+            setData(prev => {
+                if (!prev) return prev;
+
+                return {
+                    ...prev,
+                    files: prev.files.filter(file => file.filesId !== fileId)
+                };
+            });
+
+        } catch (error) {
+            console.error("Trash error:", error);
+            toast.error("Failed to move file to trash", {id: loadingToast});
+        }
+    };
+
     return (
         <div>
             <div className="flex items-center gap-2 mb-4 bg-muted/30 p-2 rounded-md">
@@ -476,6 +509,13 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
                                             : <Download className="mr-2 h-2 w-2" />
                                         }
                                         Download
+                                    </ContextMenuItem>
+                                    <ContextMenuItem className="text-red-500" onClick={() => handleTrash(file.filesId, file.decryptedName)}>
+                                        {theme === "win69"
+                                            ? <WindowsShellIcon142 size={24} />
+                                            : <Trash2 className="mr-2 h-2 w-2" />
+                                        }
+                                        Move to trash
                                     </ContextMenuItem>
                                 </ContextMenuContent>
                             </ContextMenu>
