@@ -382,7 +382,7 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
         }
     };
 
-    const handleTrash = async (fileId: string, fileName: string) => {
+    const handleFileTrash = async (fileId: string, fileName: string) => {
         const loadingToast = toast.loading(`Moving ${fileName} to trash...`);
 
         try {
@@ -410,6 +410,37 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
         } catch (error) {
             console.error("Trash error:", error);
             toast.error("Failed to move file to trash", {id: loadingToast});
+        }
+    };
+
+    const handleFolderTrash = async (folderId: string, folderName: string) => {
+        const loadingToast = toast.loading(`Moving ${folderName} to trash...`);
+
+        try {
+            const res = await customFetch(
+                `${backendBaseUrl}/api/Folder/trash/${folderId}`,
+                {
+                    method: "POST",
+                    credentials: "include"
+                }
+            );
+
+            if (!res.ok) throw new Error("Failed to move file to trash.");
+
+            toast.success("Folder moved to trash", {id: loadingToast});
+
+            setData(prev => {
+                if (!prev) return prev;
+
+                return {
+                    ...prev,
+                    folders: prev.folders.filter(folder => folder.folderId !== folderId)
+                };
+            });
+
+        } catch (error) {
+            console.error("Trash error:", error);
+            toast.error("Failed to move folder to trash", {id: loadingToast});
         }
     };
 
@@ -461,24 +492,39 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
                     </TableHeader>
                     <TableBody>
                         {sortedFolders.map((folder) => (
-                            <TableRow
-                                key={folder.folderId}
-                                className="cursor-pointer hover:bg-muted/50"
-                                onClick={() => navigateToSubFolder(folder.folderId, folder.decryptedName)}
-                            >
-                                <TableCell className="font-medium flex items-center gap-3">
-                                    {theme === "win69"
-                                        ? <WindowsFolder size={24} />
-                                        : <Folder className="h-5 w-5 text-blue-500 fill-blue-500/20"/>
+                            <ContextMenu key={folder.folderId}>
+                                <ContextMenuTrigger
+                                    render={
+                                        <TableRow
+                                            className="hover:bg-muted/50 cursor-context-menu"
+                                            style={{ display: "table-row" }}
+                                            onClick={() => navigateToSubFolder(folder.folderId, folder.decryptedName)}
+                                        />
                                     }
-                                    <span className="truncate max-w-100"
-                                          title={folder.decryptedName}>{folder.decryptedName}</span>
-                                </TableCell>
-                                <TableCell className="text-muted-foreground whitespace-nowrap">
-                                    {format(new Date(folder.updatedAt), "dd-MM-yyyy HH:mm")}
-                                </TableCell>
-                                <TableCell className="text-muted-foreground text-right">--</TableCell>
-                            </TableRow>
+                                >
+                                    <TableCell className="font-medium flex items-center gap-3">
+                                        {theme === "win69"
+                                            ? <WindowsFolder size={24} />
+                                            : <Folder className="h-5 w-5 text-blue-500 fill-blue-500/20"/>
+                                        }
+                                        <span className="truncate max-w-100"
+                                              title={folder.decryptedName}>{folder.decryptedName}</span>
+                                    </TableCell>
+                                    <TableCell className="text-muted-foreground whitespace-nowrap">
+                                        {format(new Date(folder.updatedAt), "dd-MM-yyyy HH:mm")}
+                                    </TableCell>
+                                    <TableCell className="text-muted-foreground text-right">--</TableCell>
+                                </ContextMenuTrigger>
+                                <ContextMenuContent className="w-48">
+                                    <ContextMenuItem className="text-red-500" onClick={() => handleFolderTrash(folder.folderId, folder.decryptedName)}>
+                                        {theme === "win69"
+                                            ? <WindowsShellIcon142 size={24} />
+                                            : <Trash2 className="mr-2 h-2 w-2" />
+                                        }
+                                        Move to trash
+                                    </ContextMenuItem>
+                                </ContextMenuContent>
+                            </ContextMenu>
                         ))}
 
                         {sortedFiles.map((file) => (
@@ -510,7 +556,7 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
                                         }
                                         Download
                                     </ContextMenuItem>
-                                    <ContextMenuItem className="text-red-500" onClick={() => handleTrash(file.filesId, file.decryptedName)}>
+                                    <ContextMenuItem className="text-red-500" onClick={() => handleFileTrash(file.filesId, file.decryptedName)}>
                                         {theme === "win69"
                                             ? <WindowsShellIcon142 size={24} />
                                             : <Trash2 className="mr-2 h-2 w-2" />
