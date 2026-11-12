@@ -37,7 +37,8 @@ export function DashboardPage() {
     }
 
     return (
-        <div className="flex-1 p-8 pt-4">
+        <div className="flex-1 p-2">
+            <h1 className="mb-6 text-2xl font-semibold">My files</h1>
             <div className="flex flex-col sm:flex-row items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                     <CreateFolderDialog
