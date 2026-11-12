@@ -4,6 +4,7 @@ import {
     DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger
 } from "@/shared/ui/dropdown-menu";
 import {Avatar, AvatarFallback} from "@/shared/ui/avatar";
+import {SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/shared/ui/sidebar";
 import {logoutUserApi} from "@/shared/api";
 import {setGuest, useAuth} from "@/entities/session";
 import {Settings, LogOut, ShieldUser} from "lucide-react";
@@ -17,7 +18,11 @@ import {useState} from "react";
 import {SettingsDialog} from "@/features/settings";
 import { useTheme } from "@/app/providers/ThemeProvider";
 
-export function UserProfileMenu() {
+interface UserProfileMenuProps {
+    variant?: "header" | "sidebar"
+}
+
+export function UserProfileMenu({ variant = "header" }: UserProfileMenuProps) {
     const navigate = useNavigate();
     const auth = useAuth();
     const { theme } = useTheme();
@@ -41,46 +46,84 @@ export function UserProfileMenu() {
 
     const initials = auth.user.username?.slice(0, 2).toUpperCase() ?? "U";
 
+    const menuItems = (
+        <>
+            <DropdownMenuGroup>
+                <DropdownMenuLabel>{auth.user.username}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+
+                {auth.user.isAdmin && (
+                    <DropdownMenuItem onClick={() => navigate("/admin-panel")}>
+                        {theme === "win69"
+                            ? <Windows95Pifmgr17 size={24} />
+                            : <ShieldUser className="mr-2 h-4 w-4"/>
+                        }
+                        Admin Panel
+                    </DropdownMenuItem>
+                )}
+
+                <DropdownMenuItem onClick={() => setShowSettings(true)}>
+                    {theme === "win69"
+                        ? <WindowsTaskman size={24} />
+                        : <Settings className="mr-2 h-4 w-4"/>
+                    }
+                    Settings
+                </DropdownMenuItem>
+
+                <DropdownMenuItem onClick={handleLogout}
+                                  className="text-red-500 focus:text-red-500 focus:bg-red-500/10">
+                    {theme === "win69"
+                        ? <WindowsShutDown size={24} />
+                        : <LogOut className="mr-2 h-4 w-4"/>
+                    }
+                    Logout
+                </DropdownMenuItem>
+            </DropdownMenuGroup>
+        </>
+    )
+
     return (
         <>
             <DropdownMenu>
-                <DropdownMenuTrigger className="outline-none">
-                    <Avatar className="h-8 w-8 hover:opacity-80 transition-opacity cursor-pointer">
-                        <AvatarFallback>{initials}</AvatarFallback>
-                    </Avatar>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" sideOffset={8} className="w-max min-w-0 max-w-48 truncate">
-                    <DropdownMenuGroup>
-                        <DropdownMenuLabel>{auth.user.username}</DropdownMenuLabel>
-                        <DropdownMenuSeparator/>
+                {variant === "sidebar" ? (
+                    <SidebarMenu>
+                        <SidebarMenuItem>
+                            <DropdownMenuTrigger
+                                render={<SidebarMenuButton size="lg" className="w-full outline-none focus-visible:ring-0" />}
+                            >
+                                <Avatar className="h-8 w-8 rounded-lg shrink-0">
+                                    <AvatarFallback>
+                                        {initials}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div className="flex flex-col flex-1 min-w-0 text-left text-sm leading-tight">
+                                    <span className="truncate font-semibold">
+                                        {auth.user.username}
+                                    </span>
+                                    {auth.user.email && (
+                                        <span className="truncate text-xs text-muted-foreground">
+                                            {auth.user.email}
+                                        </span>
+                                    )}
+                                </div>
+                            </DropdownMenuTrigger>
+                        </SidebarMenuItem>
+                    </SidebarMenu>
+                ) : (
+                    <DropdownMenuTrigger className="outline-none">
+                        <Avatar className="h-8 w-8 hover:opacity-80 transition-opacity cursor-pointer">
+                            <AvatarFallback>{initials}</AvatarFallback>
+                        </Avatar>
+                    </DropdownMenuTrigger>
+                )}
 
-                        {auth.user.isAdmin && (
-                            <DropdownMenuItem onClick={() => navigate("/admin-panel")}>
-                                {theme === "win69"
-                                    ? <Windows95Pifmgr17 size={24} />
-                                    : <ShieldUser className="mr-2 h-4 w-4"/>
-                                }
-                                Admin Panel
-                            </DropdownMenuItem>
-                        )}
-
-                        <DropdownMenuItem onClick={() => setShowSettings(true)}>
-                            {theme === "win69"
-                                ? <WindowsTaskman size={24} />
-                                : <Settings className="mr-2 h-4 w-4"/>
-                            }
-                            Settings
-                        </DropdownMenuItem>
-
-                        <DropdownMenuItem onClick={handleLogout}
-                                          className="text-red-500 focus:text-red-500 focus:bg-red-500/10">
-                            {theme === "win69"
-                                ? <WindowsShutDown size={24} />
-                                : <LogOut className="mr-2 h-4 w-4"/>
-                            }
-                            Logout
-                        </DropdownMenuItem>
-                    </DropdownMenuGroup>
+                <DropdownMenuContent
+                    align="end"
+                    side={variant === "sidebar" ? "top" : "bottom"}
+                    sideOffset={8}
+                    className="w-56"
+                >
+                    {menuItems}
                 </DropdownMenuContent>
             </DropdownMenu>
 

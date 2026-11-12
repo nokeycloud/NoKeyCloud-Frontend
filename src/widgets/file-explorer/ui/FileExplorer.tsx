@@ -1,42 +1,22 @@
+import { ArrowLeft, ChevronRight, Download, Folder, Home, Trash2 } from "lucide-react";
 import {
-    Archive,
-    ArrowLeft,
-    ChevronRight,
-    Code,
-    Trash2,
-    File as FileIcon,
-    FileText,
-    Home,
-    Image as ImageIcon,
-    Music,
-    Video,
-    Folder,
-    Download
-} from "lucide-react";
-import {
-    Windows95GpuJpegFile,
-    Windows95GurichTextFile,
-    WindowsVideoFile,
-    Windows95WaveSound,
-    WindowsSystemFile,
-    WindowsShellIcon142,
-    WindowsZipFile,
-    Windows95File,
-    ProgmanIcon16,
     WindowsFolder,
     Windows95MyComputer,
-    Windows95StartupDiskWizard
+    Windows95StartupDiskWizard,
+    WindowsShellIcon142,
+    ProgmanIcon16,
 } from "react-old-icons";
 import {useNavigate} from "react-router";
 import {useEffect, useState} from "react";
 import {backendBaseUrl} from "@/shared/config";
 import {Button} from "@/shared/ui/button.tsx";
+import {FileIcon} from "@/shared/ui/file-icon";
 import {base64ToBytes, cn, formatBytes} from "@/shared/lib";
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/shared/ui/table";
 import { format } from "date-fns";
-import { setGuest } from "@/entities/session";
+import { setGuest, useAuth } from "@/entities/session";
 import {
     ContextMenu,
     ContextMenuContent,
@@ -55,53 +35,16 @@ import {decryptBytes, decryptString, importKey} from "@/shared/security";
 import {customFetch} from "@/shared/api";
 import { useTheme } from "@/app/providers/ThemeProvider";
 
-function getFileIcon(filename: string, theme: string) {
-    const isWin69 = theme === "win69";
-    const ext = filename.split('.').pop()?.toLowerCase();
-    switch (ext) {
-        case 'jpg':
-        case 'jpeg':
-        case 'png':
-        case 'gif':
-            return isWin69 ? <Windows95GpuJpegFile size={24} /> : <ImageIcon className="h-5 w-5 text-purple-500"/>;
-        case 'pdf':
-        case 'txt':
-        case 'doc':
-        case 'docx':
-        case 'md':
-            return isWin69 ? <Windows95GurichTextFile size={24} /> : <FileText className="h-5 w-5 text-orange-500"/>;
-        case 'mp4':
-        case 'mkv':
-        case 'avi':
-            return isWin69 ? <WindowsVideoFile size={24} /> : <Video className="h-5 w-5 text-red-500"/>;
-        case 'mp3':
-        case 'wav':
-        case 'flac':
-            return isWin69 ? <Windows95WaveSound size={24} /> : <Music className="h-5 w-5 text-yellow-500"/>;
-        case 'js':
-        case 'cs' :
-        case 'py' :
-        case 'java' :
-        case 'cpp' :
-            return isWin69 ? <WindowsSystemFile size={24} /> : <Code className="h-5 w-5 text-green-500"/>;
-        case 'zip':
-        case 'rar':
-        case '7z' :
-        case 'tar.gz' :
-        case 'tar':
-        case 'tar.bz2' :
-            return isWin69 ? <WindowsZipFile size={24} /> : <Archive className="h-5 w-5 text-stone-500"/>;
-        default:
-            return isWin69 ? <Windows95File size={24} /> : <FileIcon className="h-5 w-5 text-slate-500"/>;
-    }
-}
-
-type SortKey = "name" | "size" | "updatedAt";
-type SortDirection = "asc" | "desc";
+export type FileExplorerMode =
+    | "files"
+    | "favorites"
+    | "shared"
+    | "shared-with-me"
 
 interface FileExplorerProps {
-    folderId: string;
-    rootFolderId: string;
+    mode?: FileExplorerMode;
+    folderId?: string;
+    rootFolderId?: string;
 }
 
 interface UIFile extends FileResponse {
@@ -112,9 +55,24 @@ interface UIFolder extends FolderResponse {
     decryptedName: string;
 }
 
-export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
+type SortKey = "name" | "size" | "updatedAt";
+type SortDirection = "asc" | "desc";
+
+const FLAT_ENDPOINTS: Record<Exclude<FileExplorerMode, "files">, string> = {
+    favorites: `${backendBaseUrl}/api/File/favorites`,
+    shared: `${backendBaseUrl}/api/File/shared`,
+    "shared-with-me": `${backendBaseUrl}/api/File/shared-with-me`,
+};
+
+export function FileExplorer({
+                                 mode = "files",
+                                 folderId,
+                                 rootFolderId,
+                             }: FileExplorerProps) {
     const navigate = useNavigate();
     const { theme } = useTheme();
+    const auth = useAuth();
+    const isFlat = mode !== "files";
     const [data, setData] = useState<{ folders: UIFolder[], files: UIFile[] } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
@@ -130,13 +88,13 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
     );
 
     useEffect(() => {
-        if (!rootFolderId) return;
+        if (isFlat || !rootFolderId) return;
         sessionStorage.removeItem("breadcrumbHistory");
         setBreadcrumbHistory([{ id: rootFolderId, name: "Home" }]);
-    }, [rootFolderId]);
+    }, [rootFolderId, isFlat]);
 
     useEffect(() => {
-        if (!rootFolderId) return;
+        if (isFlat || !rootFolderId || !folderId) return;
 
         let newHistory = [...breadcrumbHistory];
 
@@ -148,15 +106,18 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
 
         setBreadcrumbHistory(newHistory);
         sessionStorage.setItem("breadcrumbHistory", JSON.stringify(newHistory));
-    }, [folderId, rootFolderId]);
+    }, [folderId, rootFolderId, isFlat]);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
                 setIsLoading(true);
 
-                let currentFolderKey = vaultKeys.getKey(folderId);
-                if (!currentFolderKey && folderId !== rootFolderId) {
+                let currentFolderKey = isFlat
+                    ? auth.masterKey
+                    : folderId ? vaultKeys.getKey(folderId) : null;
+
+                if (!isFlat && folderId && !currentFolderKey && folderId !== rootFolderId) {
                     const ancestryResponse = await customFetch(`${backendBaseUrl}/api/Folder/GetAncestry?folderId=${folderId}`, {
                         credentials: "include",
                         headers: { "Content-Type": "application/json" }
@@ -173,7 +134,7 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
                     const ancestryData = await ancestryResponse.json() as FolderAncestryResponse;
                     const lineage = ancestryData.items;
 
-                    const rootKey = vaultKeys.getKey(rootFolderId);
+                    const rootKey = rootFolderId ? vaultKeys.getKey(rootFolderId) : null;
                     if (!rootKey) throw new Error("Root key missing. Cannot rebuild chain. Please log in again.");
 
                     for (let i = 1; i < lineage.length; i++) {
@@ -189,16 +150,22 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
                         vaultKeys.setKey(lineage[i].id, folderCryptoKey);
                     }
 
-                    currentFolderKey = vaultKeys.getKey(folderId);
+                    currentFolderKey = folderId ? vaultKeys.getKey(folderId) : null;
                 }
 
                 if (!currentFolderKey) {
-                    toast.error("Unable to verify security credentials for this directory.");
-                    navigate(`/folder/${rootFolderId}`, { replace: true });
+                    toast.error("Unable to verify security credentials for this view.");
+                    if (!isFlat && rootFolderId) {
+                        navigate(`/folder/${rootFolderId}`, { replace: true });
+                    }
                     return;
                 }
 
-                const res = await customFetch(`${backendBaseUrl}/api/Folder/GetContent?FolderId=${folderId}`, {
+                const url = isFlat
+                    ? FLAT_ENDPOINTS[mode as Exclude<FileExplorerMode, "files">]
+                    : `${backendBaseUrl}/api/Folder/GetContent?FolderId=${folderId}`;
+
+                const res = await customFetch(url, {
                     credentials: "include",
                     headers: {"Content-Type": "application/json"}
                 });
@@ -210,10 +177,20 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
                 }
 
                 if (!res.ok) throw new Error("Failed to load content.");
-                const json = (await res.json()) as ListContentResponse;
+
+                const json = await res.json();
+
+                const rawFiles: FileResponse[] = Array.isArray(json)
+                    ? json
+                    : "files" in json
+                        ? json.files
+                        : json.items ?? [];
+                const rawFolders: FolderResponse[] = !isFlat && "folders" in json
+                    ? (json as ListContentResponse).folders
+                    : [];
 
                 const foldersWithNames: UIFolder[] = await Promise.all(
-                    json.folders.map(async (f) => {
+                    rawFolders.map(async (f) => {
                         try {
                             const nameBytes = base64ToBytes(f.nameEncrypted);
                             const keyBytes = base64ToBytes(f.folderKeyEncrypted);
@@ -232,7 +209,7 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
                 );
 
                 const filesWithNames: UIFile[] = await Promise.all(
-                    json.files.map(async (f) => {
+                    rawFiles.map(async (f) => {
                         try {
                             const nameBytes = base64ToBytes(f.fileNameEncrypted);
                             const decryptedName = await decryptString(currentFolderKey!, nameBytes);
@@ -252,7 +229,7 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
         };
 
         fetchData();
-    }, [folderId, navigate]);
+    }, [folderId, mode, navigate, isFlat]);
 
     const handleSort = (key: SortKey) => {
         setSortConfig(current => ({
@@ -262,6 +239,8 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
     };
 
     const navigateToSubFolder = (id: string, name: string) => {
+        if (isFlat) return;
+
         let newHistory = [...breadcrumbHistory];
         const existingIdx = newHistory.findIndex(b => b.id === id);
 
@@ -291,7 +270,7 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
         }
     };
 
-    if (!rootFolderId) return null;
+    if (!isFlat && !rootFolderId) return null;
     if (isLoading) return <div className="p-8 text-center text-slate-500">Decrypting and loading files...</div>;
     if (!data) return null;
 
@@ -353,7 +332,9 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
 
             const data = await res.json();
 
-            const parentFolderKey = vaultKeys.getKey(folderId);
+            const parentFolderKey = isFlat
+                ? auth.masterKey
+                : folderId ? vaultKeys.getKey(folderId) : null;
             if (!parentFolderKey) throw new Error("Cryptographic context missing. Please refresh.");
 
             const encryptedKeyBytes = base64ToBytes(data.encryptedKey);
@@ -415,39 +396,41 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
 
     return (
         <div>
-            <div className="flex items-center gap-2 mb-4 bg-muted/30 p-2 rounded-md">
-                <Button variant="ghost" size="icon" onClick={() => navigateToSubFolder(rootFolderId, "Home")}
-                        title="Home">
-                    {theme === "win69"
-                        ? <Windows95MyComputer size={24} />
-                        : <Home className="h-4 w-4"/>
-                    }
-                </Button>
-                <Button variant="ghost" size="icon" onClick={goBack} disabled={folderId === rootFolderId} title="Back">
-                    {theme === "win69"
-                        ? <ProgmanIcon16 size={24} />
-                        : <ArrowLeft className="h-4 w-4"/>
-                    }
-                </Button>
+            {!isFlat && (
+                <div className="flex items-center gap-2 mb-4 bg-muted/30 p-2 rounded-md">
+                    <Button variant="ghost" size="icon" onClick={() => navigateToSubFolder(rootFolderId!, "Home")}
+                            title="Home">
+                        {theme === "win69"
+                            ? <Windows95MyComputer size={24} />
+                            : <Home className="h-4 w-4"/>
+                        }
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={goBack} disabled={folderId === rootFolderId} title="Back">
+                        {theme === "win69"
+                            ? <ProgmanIcon16 size={24} />
+                            : <ArrowLeft className="h-4 w-4"/>
+                        }
+                    </Button>
 
-                <div className="h-4 w-px bg-border mx-2"/>
+                    <div className="h-4 w-px bg-border mx-2"/>
 
-                <div className="flex items-center flex-wrap gap-1 text-sm font-medium">
-                    {breadcrumbHistory.map((crumb, idx) => (
-                        <div key={crumb.id} className="flex items-center">
-                            <button
-                                className={cn("hover:text-primary transition-colors cursor-pointer", idx === breadcrumbHistory.length - 1 ? "text-primary" : "text-muted-foreground")}
-                                onClick={() => navigateToSubFolder(crumb.id, crumb.name)}
-                            >
-                                {crumb.name}
-                            </button>
-                            {idx < breadcrumbHistory.length - 1 && (
-                                <ChevronRight className="h-4 w-4 mx-1 text-muted-foreground"/>
-                            )}
-                        </div>
-                    ))}
+                    <div className="flex items-center flex-wrap gap-1 text-sm font-medium">
+                        {breadcrumbHistory.map((crumb, idx) => (
+                            <div key={crumb.id} className="flex items-center">
+                                <button
+                                    className={cn("hover:text-primary transition-colors cursor-pointer", idx === breadcrumbHistory.length - 1 ? "text-primary" : "text-muted-foreground")}
+                                    onClick={() => navigateToSubFolder(crumb.id, crumb.name)}
+                                >
+                                    {crumb.name}
+                                </button>
+                                {idx < breadcrumbHistory.length - 1 && (
+                                    <ChevronRight className="h-4 w-4 mx-1 text-muted-foreground"/>
+                                )}
+                            </div>
+                        ))}
+                    </div>
                 </div>
-            </div>
+            )}
 
             <div className="rounded-md border bg-card text-card-foreground shadow-sm">
                 <Table>
@@ -460,7 +443,7 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {sortedFolders.map((folder) => (
+                        {!isFlat && sortedFolders.map((folder) => (
                             <TableRow
                                 key={folder.folderId}
                                 className="cursor-pointer hover:bg-muted/50"
@@ -492,7 +475,7 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
                                     }
                                 >
                                     <TableCell className="font-medium flex items-center gap-3">
-                                        {getFileIcon(file.decryptedName, theme)}
+                                        <FileIcon filename={file.decryptedName} />
                                         <span className="truncate max-w-100" title={file.decryptedName}>{file.decryptedName}</span>
                                     </TableCell>
                                     <TableCell className="text-muted-foreground whitespace-nowrap">
@@ -510,13 +493,15 @@ export function FileExplorer({ folderId, rootFolderId }: FileExplorerProps) {
                                         }
                                         Download
                                     </ContextMenuItem>
-                                    <ContextMenuItem className="text-red-500" onClick={() => handleTrash(file.filesId, file.decryptedName)}>
-                                        {theme === "win69"
-                                            ? <WindowsShellIcon142 size={24} />
-                                            : <Trash2 className="mr-2 h-2 w-2" />
-                                        }
-                                        Move to trash
-                                    </ContextMenuItem>
+                                    {!isFlat && (
+                                        <ContextMenuItem className="text-red-500" onClick={() => handleTrash(file.filesId, file.decryptedName)}>
+                                            {theme === "win69"
+                                                ? <WindowsShellIcon142 size={24} />
+                                                : <Trash2 className="mr-2 h-2 w-2" />
+                                            }
+                                            Move to trash
+                                        </ContextMenuItem>
+                                    )}
                                 </ContextMenuContent>
                             </ContextMenu>
                         ))}
